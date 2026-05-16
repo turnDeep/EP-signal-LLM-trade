@@ -1,0 +1,64 @@
+mode: daytrade
+
+project:
+  root_dir: .
+  outputs_dir: outputs/daytrade
+  features_dir: outputs/daytrade/features
+  reports_dir: outputs/daytrade/reports
+  canonical_panel_path: outputs/daytrade/features/feature_panel_all.parquet
+  canonical_panel_head_path: outputs/daytrade/features/feature_panel_all_head.csv
+  top250_panel_path: outputs/daytrade/features/feature_panel_top_250.parquet
+  sample_panel_path: outputs/daytrade/features/feature_panel_sample.parquet
+  manifest_path: outputs/daytrade/daytrade_restore_manifest.md
+  final_report_path: outputs/daytrade/reports/README_DAYTRADE_RESTORED.md
+
+artifacts:
+  source_feature_panel_path: outputs/features/feature_panel_all.parquet
+  source_feature_panel_head_path: outputs/features/feature_panel_all_head.csv
+  source_top250_panel_path: outputs/features/feature_panel_top_250.parquet
+  source_top250_panel_head_path: outputs/features/feature_panel_top_250_head.csv
+  source_sample_panel_path: outputs/features/feature_panel_sample.parquet
+  source_sample_panel_head_path: outputs/features/feature_panel_sample_head.csv
+  source_sample_profile_path: outputs/features/feature_panel_sample_profile.csv
+  source_feature_pipeline_stderr_log: outputs/reports/full_universe_feature_pipeline_stderr.log
+  source_feature_pipeline_stdout_log: outputs/reports/full_universe_feature_pipeline_stdout.log
+  source_validation_stderr_log: outputs/reports/full_universe_validation_reduced_stderr.log
+  source_validation_stdout_log: outputs/reports/full_universe_validation_reduced_stdout.log
+
+research:
+  preserved_targets:
+    - target_excess_return_30m
+    - target_positive_30m
+    - target_excess_return_60m
+    - target_positive_60m
+    - target_excess_return_close
+    - target_positive_close
+  minimal_feature_set:
+    - daily_rrs_prev
+    - distance_to_avwap_63_prev
+    - volume_spike_5m
+    - rs_x_intraday_rvol
+    - breadth_thrust_prev
+    - mtf_disagreement_score
+  extended_feature_set:
+    - daily_buy_pressure_prev
+    - prev_day_adr_pct
+    - industry_buy_pressure_prev
+    - EMA_8_15
+    - distance_to_prev_day_high
+    - close_vs_vwap_15
+    - sector_buy_pressure_prev
+    - daily_rrs_prev
+    - daily_rs_score_prev
+    - distance_to_avwap_63_prev
+    - volume_spike_5m
+    - industry_rs_prev
+    - same_slot_avg_vol_20d
+    - rs_x_intraday_rvol
+    - intraday_range_expansion_vs_atr
+    - prev_day_close_vs_sma50
+  preferred_models:
+    - hist_gbm_extended
+    - logistic_l2_minimal
+    - rule_orb_vwap_rvol_rs
+

@@ -1,0 +1,15 @@
+numpy
+pandas
+requests
+python-dotenv
+tqdm
+yfinance
+curl-cffi
+scipy
+pyyaml
+scikit-learn
+openai
+pyarrow
+numba
+matplotlib
+discord.py>=2.4.0

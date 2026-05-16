@@ -1,0 +1,23 @@
+{
+  "asof_date": "auto",
+  "candidate_dir": "",
+  "top_new_candidates": 12,
+  "compare_top_n": 5,
+  "fallback_holdings": ["MXL", "SIMO", "AAOI"],
+  "trading_mode": "dry_run",
+  "allow_live_orders": false,
+  "default_order_notional": 1000,
+  "max_single_order_notional": 5000,
+  "include_account_values_in_llm_prompt": false,
+  "run_entry_pipeline_command": [],
+  "enable_opencode_review": true,
+  "opencode_models": [
+    "opencode-go/kimi-k2.6",
+    "opencode-go-minimax/minimax-m2.7",
+    "opencode-go/glm-5.1",
+    "opencode-go/deepseek-v4-pro"
+  ],
+  "opencode_timeout_seconds": 1800,
+  "deepseek_synthesis_model": "opencode-go/deepseek-v4-pro",
+  "discord_summary_char_budget": 3800
+}

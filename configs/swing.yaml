@@ -1,0 +1,50 @@
+project:
+  root_dir: outputs/swing
+  outputs_dir: outputs/swing/outputs
+  reports_dir: outputs/swing/reports
+  feature_panel_path: outputs/swing/features/swing_feature_panel.parquet
+  data_audit_report_path: outputs/swing/data_audit_report.md
+  schema_summary_path: outputs/swing/schema_summary.csv
+  data_inventory_path: outputs/swing/file_inventory.csv
+
+data:
+  discovery_roots:
+    - .
+    - analysis_outputs
+  preferred_dataset_dir: analysis_outputs/russell3000_full_dataset
+  smoke_dataset_path: analysis_outputs/r3000_smoke_parallel_full_1_v2/russell3000_indicator_dataset.pkl
+  earnings_calendar_path: analysis_outputs/qm_qc_reproduction/earnings_calendar.pkl
+  max_deep_inspect_gb: 3.0
+  schema_sample_symbols: 5
+  session_timezone: America/New_York
+  intraday_timezone: UTC
+
+research:
+  feature_start_date: 2018-01-01
+  min_history_days: 252
+  max_symbols: 3000
+  target_horizons_days: [5, 10, 20]
+  primary_horizon_days: 10
+  min_price: 5.0
+  min_dollar_volume_20: 5000000
+  max_atr_pct: 0.15
+  model_top_k: 10
+  max_concurrent_positions: 12
+  sector_position_cap: 3
+  event_avoidance_days: 3
+  purge_days: 20
+  embargo_days: 5
+  max_train_rows: 400000
+  max_importance_rows: 150000
+  execution_recent_sessions: 60
+
+costs:
+  commission_rate_one_way: 0.002
+  commission_rate_round_trip: 0.004
+  slippage_bps_per_side: 5
+  spread_bps_round_trip: 5
+
+runtime:
+  seed: 42
+  log_level: INFO
+  n_jobs: -1
