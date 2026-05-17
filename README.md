@@ -33,10 +33,6 @@ EPで株価と出来高の変化を検出し、ニュース、決算、ガイダ
 | `validate_ep_entry_rules_2025.py` | EPエントリールール検証 |
 | `rank_policy_theme_ep_candidates.py` | 政策・産業テーマ付きEP候補ランキング |
 | `configs/daily_close_portfolio_system.example.json` | 大引け後レビュー設定例 |
-| `patterns/` | Codex向けの再利用可能な作業パターン |
-| `validators/` | 安全スキャン、プリフライト、検証コマンド |
-| `modules/` | 5つのAI社員ロール定義 |
-| `integrations/` | チーム配布・導入用メタ情報 |
 
 ## セットアップ
 
@@ -133,18 +129,6 @@ python daily_close_portfolio_system.py --config configs\\daily_close_portfolio_s
 
 Discordの承認ボタンを押しても、上記設定では注文案のドライラン記録だけを作ります。ライブ発注を有効化する場合は、別途小口テスト、権限確認、二段階確認フローの検証が必要です。
 
-## Codex Development Kit
-
-このリポジトリには、Codexを開発チームとして運用するための5層構成も含めています。
-
-1. `SPEC.md`: プロジェクト憲法
-2. `patterns/`: 再利用可能な実装・検証パターン
-3. `validators/`: 安全スキャンとプリフライト
-4. `modules/`: 5つのAI社員ロール
-5. `integrations/`: 配布・導入用メタ情報
-
-作業前に `CODEX.md` と `SPEC.md` を読み、対象タスクに合う `patterns/` と `modules/` を使う運用を想定しています。
-
 ## 検証
 
 最低限の構文チェック:
@@ -156,12 +140,6 @@ python -m py_compile `
   recognition_gap_ep_system.py `
   scan_ep_daily_entry_signals.py `
   validate_ep_entry_rules_2025.py
-```
-
-Codexプリフライト:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File validators\\preflight.ps1
 ```
 
 ## 注意事項
