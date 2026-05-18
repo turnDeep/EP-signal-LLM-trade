@@ -18,8 +18,10 @@ This is the daily-close orchestration layer for the Recognition Gap EP system.
 
 ## Safety Defaults
 
-- `trading_mode` defaults to `dry_run`.
-- `allow_live_orders` defaults to `false`.
+- Webull is read-only in this system.
+- No order payloads are generated.
+- No live, paper, or dry-run orders are submitted.
+- Discord buttons for trading actions are not created.
 - API keys are read from `.env` or environment variables only.
 - Secrets are not passed to opencode prompts.
 - Account values are excluded from LLM prompts by default.
@@ -53,7 +55,7 @@ Post the report to Discord:
 python daily_close_portfolio_system.py --config configs\daily_close_portfolio_system.example.json --post-discord
 ```
 
-Post the report and keep the bot alive so action buttons work:
+Post the report and keep the Discord bot process online:
 
 ```powershell
 python daily_close_portfolio_system.py --config configs\daily_close_portfolio_system.example.json --serve-discord
@@ -61,12 +63,7 @@ python daily_close_portfolio_system.py --config configs\daily_close_portfolio_sy
 
 Use `--no-opencode` when you want the old fast fallback report without multi-model review and DeepSeek synthesis.
 
-The Discord action cards include:
-
-- `Approve`: approves the action. In dry-run mode it records the simulated order payload.
-- `Reject`: rejects the action.
-- `Details`: shows the proposed order payload.
-- `Confirm Live Order`: appears only after approval when `trading_mode=live` and `allow_live_orders=true`.
+Discord posts analysis summaries and proposed review notes only. It does not attach trading buttons.
 
 The default config enables opencode go review. It runs Kimi, MiniMax, GLM, and DeepSeek, then asks DeepSeek to aggregate those reports into Japanese Discord-ready summaries for both holdings and new candidates.
 
@@ -76,13 +73,8 @@ The default config enables opencode go review. It runs Kimi, MiniMax, GLM, and D
 "discord_summary_char_budget": 3800
 ```
 
-## Live Order Policy
+## Webull Trading Policy
 
-Live order execution should remain disabled until:
+Webull trading is intentionally not implemented.
 
-1. Discord reporting works.
-2. Webull balance/positions are parsed correctly.
-3. Order payloads are verified with tiny test orders or paper mode.
-4. The two-step Discord confirmation flow is tested in `dry_run`.
-
-The implementation prepares proposed actions and defaults to dry-run. It does not silently place live orders.
+The implementation reads holdings for portfolio context, but it does not create order payloads, does not call order placement endpoints, and does not expose Discord controls that can approve or execute trades.

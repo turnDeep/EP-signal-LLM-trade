@@ -220,10 +220,6 @@ class SystemConfig:
     top_new_candidates: int = 10
     compare_top_n: int = 5
     fallback_holdings: tuple[str, ...] = ("MXL", "SIMO", "AAOI")
-    trading_mode: str = "dry_run"
-    allow_live_orders: bool = False
-    default_order_notional: float = 1_000.0
-    max_single_order_notional: float = 5_000.0
     include_account_values_in_llm_prompt: bool = False
     run_entry_pipeline_command: tuple[str, ...] = ()
     enable_opencode_review: bool = False
@@ -241,10 +237,6 @@ class SystemConfig:
             top_new_candidates=int(raw.get("top_new_candidates", 10)),
             compare_top_n=int(raw.get("compare_top_n", 5)),
             fallback_holdings=tuple(s.upper().lstrip("$") for s in raw.get("fallback_holdings", ["MXL", "SIMO", "AAOI"])),
-            trading_mode=clean(raw.get("trading_mode")) or "dry_run",
-            allow_live_orders=bool(raw.get("allow_live_orders", False)),
-            default_order_notional=float(raw.get("default_order_notional", 1_000.0)),
-            max_single_order_notional=float(raw.get("max_single_order_notional", 5_000.0)),
             include_account_values_in_llm_prompt=bool(raw.get("include_account_values_in_llm_prompt", False)),
             run_entry_pipeline_command=tuple(str(x) for x in raw.get("run_entry_pipeline_command", [])),
             enable_opencode_review=bool(raw.get("enable_opencode_review", False)),
@@ -299,9 +291,7 @@ class FmpClient:
 
 
 class WebullGateway:
-    def __init__(self, trading_mode: str, allow_live_orders: bool):
-        self.trading_mode = trading_mode.lower()
-        self.allow_live_orders = allow_live_orders
+    def __init__(self):
         self.account_id = os.getenv("WEBULL_ACCOUNT_ID", "")
         self.trade_api = None
         self.quotes_api = None
@@ -368,68 +358,6 @@ class WebullGateway:
             except Exception:
                 continue
         return []
-
-    def order_history(self) -> list[dict[str, Any]]:
-        if self.trade_api is None:
-            return []
-        methods = [
-            ("order_v2", "get_order_history_request"),
-            ("order", "list_today_orders"),
-            ("order", "list_open_orders"),
-            ("order_v2", "get_order_history"),
-            ("order_v2", "get_history_order"),
-            ("order_v2", "get_orders"),
-            ("order", "get_order_history"),
-        ]
-        for parent_name, method_name in methods:
-            try:
-                parent = getattr(self.trade_api, parent_name)
-                method = getattr(parent, method_name)
-                res = method(account_id=self.account_id)
-                data = response_json(res)
-                if isinstance(data, list):
-                    return data
-                if isinstance(data, dict):
-                    for key in ["orders", "data", "items", "order_list"]:
-                        if isinstance(data.get(key), list):
-                            return data[key]
-            except Exception:
-                continue
-        return []
-
-    def place_order(self, symbol: str, side: str, quantity: int, order_type: str = "MARKET", limit_price: float | None = None) -> dict[str, Any]:
-        if self.trading_mode != "live" or not self.allow_live_orders:
-            return {
-                "dry_run": True,
-                "symbol": symbol,
-                "side": side,
-                "quantity": quantity,
-                "order_type": order_type,
-                "limit_price": limit_price,
-            }
-        if self.trade_api is None:
-            return {"error": "webull_not_connected"}
-        client_order_id = uuid.uuid4().hex
-        new_orders: dict[str, Any] = {
-            "client_order_id": client_order_id,
-            "symbol": symbol.upper(),
-            "instrument_type": "EQUITY",
-            "market": "US",
-            "order_type": order_type,
-            "quantity": str(int(quantity)),
-            "support_trading_session": "N",
-            "side": side.upper(),
-            "time_in_force": "DAY",
-            "entrust_type": "QTY",
-            "account_tax_type": "SPECIFIC",
-        }
-        if limit_price is not None:
-            new_orders["limit_price"] = str(round(float(limit_price), 2))
-        try:
-            res = self.trade_api.order_v2.place_order(account_id=self.account_id, new_orders=new_orders)
-            return {"status_code": getattr(res, "status_code", None), "response": response_json(res)}
-        except Exception as exc:
-            return {"error": str(exc)}
 
     @staticmethod
     def _parse_positions(data: Any) -> list[dict[str, Any]]:
@@ -576,7 +504,7 @@ def holding_review(symbol: str, candidate_row: pd.Series | None, fmp: FmpClient 
     }
 
 
-def build_actions(candidates: pd.DataFrame, holdings: list[dict[str, Any]], reviews: list[dict[str, Any]], cfg: SystemConfig) -> list[dict[str, Any]]:
+def build_actions(candidates: pd.DataFrame, holdings: list[dict[str, Any]], reviews: list[dict[str, Any]], compare_top_n: int) -> list[dict[str, Any]]:
     held = {h["symbol"] for h in holdings}
     actions: list[dict[str, Any]] = []
     for review in reviews:
@@ -590,10 +518,9 @@ def build_actions(candidates: pd.DataFrame, holdings: list[dict[str, Any]], revi
                     "symbol": review["symbol"],
                     "status": "proposed",
                     "reason": review["action"],
-                    "dry_run": cfg.trading_mode.lower() != "live" or not cfg.allow_live_orders,
                 }
             )
-    for _, row in candidates.head(cfg.compare_top_n).iterrows():
+    for _, row in candidates.head(compare_top_n).iterrows():
         sym = clean(row.get("symbol")).upper()
         if sym in held:
             continue
@@ -601,12 +528,10 @@ def build_actions(candidates: pd.DataFrame, holdings: list[dict[str, Any]], revi
             {
                 "id": uuid.uuid4().hex[:12],
                 "created_at": now_utc_iso(),
-                "type": "WATCH_OR_BUY",
+                "type": "WATCH",
                 "symbol": sym,
                 "status": "proposed",
-                "notional": min(cfg.default_order_notional, cfg.max_single_order_notional),
                 "reason": f"new_candidate_score={fnum(row.get('daily_system_score'), 0):.1f}",
-                "dry_run": cfg.trading_mode.lower() != "live" or not cfg.allow_live_orders,
             }
         )
     return actions
@@ -908,7 +833,7 @@ def run_daily_close(cfg: SystemConfig) -> dict[str, Any]:
     candidates = load_candidates(candidate_dir, cfg.top_new_candidates)
 
     fmp = FmpClient(os.getenv("FMP_API_KEY", ""))
-    webull = WebullGateway(cfg.trading_mode, cfg.allow_live_orders)
+    webull = WebullGateway()
     webull_connected = webull.connect()
     positions = webull.positions() if webull_connected else []
     if not positions:
@@ -921,7 +846,7 @@ def run_daily_close(cfg: SystemConfig) -> dict[str, Any]:
     all_by_symbol = {str(row["symbol"]).upper(): row for _, row in all_candidate_rows.iterrows()}
 
     reviews = [holding_review(sym, all_by_symbol.get(sym), fmp) for sym in held_symbols]
-    actions = build_actions(candidates, positions, reviews, cfg)
+    actions = build_actions(candidates, positions, reviews, cfg.compare_top_n)
     opencode_result = OpenCodeReviewer(cfg, out_dir).run(candidates, reviews)
     opencode_runs = opencode_result.get("runs", []) if isinstance(opencode_result, dict) else opencode_result
     model_synthesis = opencode_result.get("synthesis", {}) if isinstance(opencode_result, dict) else {}
@@ -964,7 +889,7 @@ ACTION_LABEL_JA = {
     "HOLD_CORE_TRIM_TRADE": "コア保有＋一部利確候補",
     "PROTECT_PROFIT": "利益保護を優先",
     "EXIT_REVIEW": "エグジット再点検",
-    "WATCH_OR_BUY": "監視/買い候補",
+    "WATCH": "新規監視候補",
     "TRIM": "一部利確",
     "PROTECT": "防御",
 }
@@ -1032,26 +957,6 @@ def reason_ja(value: Any) -> str:
     return action_label_ja(text)
 
 
-def trade_mode_ja(cfg: SystemConfig, action: dict[str, Any] | None = None) -> str:
-    if action and action.get("dry_run"):
-        return "ドライラン（実注文なし）"
-    if cfg.trading_mode.lower() == "live" and cfg.allow_live_orders:
-        return "ライブ発注可能"
-    return "ドライラン（実注文なし）"
-
-
-def order_payload_ja(payload: dict[str, Any]) -> str:
-    side = {"BUY": "買い", "SELL": "売り"}.get(clean(payload.get("side")).upper(), clean(payload.get("side")) or "-")
-    order_type = {"MARKET": "成行", "LIMIT": "指値"}.get(clean(payload.get("order_type")).upper(), clean(payload.get("order_type")) or "-")
-    return (
-        f"銘柄: {clean(payload.get('symbol')) or '-'} / "
-        f"売買: {side} / "
-        f"数量: {int(fnum(payload.get('quantity'), 0))} / "
-        f"注文: {order_type} / "
-        f"参考価格: {money(payload.get('price_ref')) or '-'}"
-    )
-
-
 def synthesis_by_symbol(report: dict[str, Any], key: str) -> dict[str, dict[str, Any]]:
     synthesis = report.get("model_synthesis") if isinstance(report.get("model_synthesis"), dict) else {}
     items = synthesis.get(key, []) if isinstance(synthesis, dict) else []
@@ -1085,116 +990,6 @@ async def post_discord_report(report: dict[str, Any], cfg: SystemConfig, stay_on
 
     intents = discord.Intents.default()
     client = discord.Client(intents=intents)
-    actions_path = Path(report["out_dir"]) / "actions.json"
-
-    def update_action(action_id: str, status: str, extra: dict[str, Any] | None = None) -> dict[str, Any] | None:
-        actions = load_json(actions_path, [])
-        selected = None
-        for action in actions:
-            if action.get("id") == action_id:
-                action["status"] = status
-                action["updated_at"] = now_utc_iso()
-                if extra:
-                    action.update(extra)
-                selected = action
-                break
-        write_json(actions_path, actions)
-        return selected
-
-    def action_order_payload(action: dict[str, Any]) -> dict[str, Any]:
-        symbol = clean(action.get("symbol")).upper()
-        fmp = FmpClient(os.getenv("FMP_API_KEY", ""))
-        quote = fmp.quote(symbol)
-        price = fnum(quote.get("price") or quote.get("previousClose"), np.nan)
-        positions = {p.get("symbol"): p for p in report.get("positions", []) if isinstance(p, dict)}
-        position = positions.get(symbol, {})
-        qty_held = fnum(position.get("quantity"), 0)
-        if action.get("type") == "WATCH_OR_BUY":
-            notional = min(fnum(action.get("notional"), cfg.default_order_notional), cfg.max_single_order_notional)
-            qty = int(notional // price) if np.isfinite(price) and price > 0 else 0
-            return {"symbol": symbol, "side": "BUY", "quantity": qty, "order_type": "MARKET", "price_ref": price}
-        if action.get("type") == "TRIM":
-            qty = max(1, int(qty_held * 0.5)) if qty_held > 0 else 0
-            return {"symbol": symbol, "side": "SELL", "quantity": qty, "order_type": "MARKET", "price_ref": price}
-        if action.get("type") == "EXIT_REVIEW":
-            qty = int(qty_held) if qty_held > 0 else 0
-            return {"symbol": symbol, "side": "SELL", "quantity": qty, "order_type": "MARKET", "price_ref": price}
-        return {"symbol": symbol, "side": "", "quantity": 0, "order_type": "MARKET", "price_ref": price}
-
-    async def execute_live_or_dry_run(action: dict[str, Any]) -> dict[str, Any]:
-        payload = action_order_payload(action)
-        if payload["quantity"] <= 0 or not payload["side"]:
-            return {"error": "quantity_or_side_unavailable", "payload": payload}
-        webull = WebullGateway(cfg.trading_mode, cfg.allow_live_orders)
-        webull.connect()
-        result = webull.place_order(
-            payload["symbol"],
-            payload["side"],
-            int(payload["quantity"]),
-            order_type=payload["order_type"],
-        )
-        update_action(action["id"], "executed_dry_run" if result.get("dry_run") else "executed_live", {"execution_result": result})
-        return result
-
-    class ConfirmLiveView(discord.ui.View):  # type: ignore[misc]
-        def __init__(self, action: dict[str, Any]):
-            super().__init__(timeout=120)
-            self.action = action
-            confirm = discord.ui.Button(label="実注文を最終確認", style=discord.ButtonStyle.danger)
-            confirm.callback = self.confirm  # type: ignore[method-assign]
-            self.add_item(confirm)
-
-        async def confirm(self, interaction: Any) -> None:
-            result = await execute_live_or_dry_run(self.action)
-            await interaction.response.send_message(f"実行結果: `{json.dumps(result, ensure_ascii=False)[:1500]}`", ephemeral=True)
-
-    class ActionView(discord.ui.View):  # type: ignore[misc]
-        def __init__(self, action: dict[str, Any]):
-            super().__init__(timeout=None if stay_online else 900)
-            self.action = action
-            approve = discord.ui.Button(label="承認", style=discord.ButtonStyle.success)
-            reject = discord.ui.Button(label="却下", style=discord.ButtonStyle.secondary)
-            details = discord.ui.Button(label="詳細", style=discord.ButtonStyle.primary)
-            approve.callback = self.approve  # type: ignore[method-assign]
-            reject.callback = self.reject  # type: ignore[method-assign]
-            details.callback = self.details  # type: ignore[method-assign]
-            self.add_item(approve)
-            self.add_item(reject)
-            self.add_item(details)
-
-        async def approve(self, interaction: Any) -> None:
-            update_action(self.action["id"], "approved")
-            payload = action_order_payload(self.action)
-            if cfg.trading_mode.lower() == "live" and cfg.allow_live_orders:
-                await interaction.response.send_message(
-                    f"`{self.action['symbol']}` を承認しました。実注文にはもう一度確認が必要です。\n注文案: {order_payload_ja(payload)}",
-                    view=ConfirmLiveView(self.action),
-                    ephemeral=True,
-                )
-            else:
-                result = await execute_live_or_dry_run(self.action)
-                await interaction.response.send_message(
-                    f"ドライランで承認しました。実注文は出していません。\n注文案: {order_payload_ja(payload)}\n結果: `{json.dumps(result, ensure_ascii=False)[:1200]}`",
-                    ephemeral=True,
-                )
-
-        async def reject(self, interaction: Any) -> None:
-            update_action(self.action["id"], "rejected")
-            await interaction.response.send_message(f"`{self.action['symbol']}` の提案 `{self.action['id']}` を却下しました。", ephemeral=True)
-
-        async def details(self, interaction: Any) -> None:
-            payload = action_order_payload(self.action)
-            detail = {
-                "銘柄": self.action.get("symbol"),
-                "提案": action_label_ja(self.action.get("type")),
-                "理由": reason_ja(self.action.get("reason")),
-                "状態": self.action.get("status"),
-                "注文案": payload,
-            }
-            await interaction.response.send_message(
-                f"{order_payload_ja(payload)}\n`{json.dumps(detail, ensure_ascii=False)[:1600]}`",
-                ephemeral=True,
-            )
 
     @client.event
     async def on_ready() -> None:  # type: ignore[no-untyped-def]
@@ -1213,7 +1008,7 @@ async def post_discord_report(report: dict[str, Any], cfg: SystemConfig, stay_on
             f"新規候補: {len(report.get('top_candidates', []))}件\n"
             f"保有銘柄: {len(report.get('holding_reviews', []))}件\n"
             f"提案アクション: {len(report.get('actions', []))}件\n"
-            f"モード: {trade_mode_ja(cfg)}\n"
+            f"Webull: 読み取り専用（注文機能なし）\n"
             f"{synthesis_meta_line(report)}"
         )
         if overall:
@@ -1282,15 +1077,15 @@ async def post_discord_report(report: dict[str, Any], cfg: SystemConfig, stay_on
             await channel.send(embed=embed)
 
         if report.get("actions"):
-            await channel.send("提案アクションです。ボタンは Bot プロセスが起動している間だけ有効です。")
+            await channel.send("提案メモです。Discordから売買操作はできません。")
             for action in report.get("actions", []):
-                color = "blue" if action.get("type") == "WATCH_OR_BUY" else "orange" if action.get("type") == "TRIM" else "red"
+                color = "blue" if action.get("type") == "WATCH" else "orange" if action.get("type") == "TRIM" else "red"
                 embed = discord.Embed(
                     title=f"提案: {action_label_ja(action.get('type'))} {action.get('symbol')}",
-                    description=f"理由: `{reason_ja(action.get('reason'))}`\nモード: `{trade_mode_ja(cfg, action)}`\nID: `{action.get('id')}`",
+                    description=f"理由: `{reason_ja(action.get('reason'))}`\nID: `{action.get('id')}`",
                     color=embed_color(color),
                 )
-                await channel.send(embed=embed, view=ActionView(action))
+                await channel.send(embed=embed)
         if not stay_online:
             await client.close()
 
@@ -1301,7 +1096,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Daily close EP portfolio review and Discord reporter.")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
     parser.add_argument("--post-discord", action="store_true")
-    parser.add_argument("--serve-discord", action="store_true", help="Post report and keep the bot alive so buttons can be used.")
+    parser.add_argument("--serve-discord", action="store_true", help="Post report and keep the Discord bot process online.")
     parser.add_argument("--no-opencode", action="store_true")
     args = parser.parse_args()
 

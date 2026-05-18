@@ -2,9 +2,9 @@
 
 Recognition Gap EP System for US equities.
 
-このリポジトリは、Episodic Pivot（EP）を起点に「市場の認識のズレ」を検出し、候補ランキング、保有銘柄レビュー、Discord通知、Webull連携のドライラン提案までを一体化するための研究・運用システムです。
+このリポジトリは、Episodic Pivot（EP）を起点に「市場の認識のズレ」を検出し、候補ランキング、保有銘柄レビュー、Discord通知、Webullの保有情報読み取りまでを一体化するための研究・運用システムです。
 
-ライブ発注はデフォルトで無効です。`trading_mode=dry_run` と `allow_live_orders=false` が初期値です。
+Webullの売買・注文送信機能は実装していません。Discordから売買操作を行うボタンもありません。
 
 ## コンセプト
 
@@ -20,7 +20,7 @@ EPで株価と出来高の変化を検出し、ニュース、決算、ガイダ
 4. LLMで「市場の認識のズレ」を多段レビューする
 5. 候補ランキングとエントリー/保有/乗り換え候補を出す
 6. Discordへ日本語で投稿する
-7. Webull連携は原則ドライランで注文案だけを作る
+7. Webull連携は保有情報の読み取り専用にする
 
 ## 主なファイル
 
@@ -99,7 +99,7 @@ Discordへ投稿する:
 python daily_close_portfolio_system.py --config configs\\daily_close_portfolio_system.example.json --post-discord
 ```
 
-Discordボタンを有効にしたままBotを常駐する:
+Discord Botを常駐する:
 
 ```powershell
 python daily_close_portfolio_system.py --config configs\\daily_close_portfolio_system.example.json --serve-discord
@@ -118,16 +118,11 @@ python daily_close_portfolio_system.py --config configs\\daily_close_portfolio_s
 
 ニュース混入対策として、銘柄名・会社名に一致しないニュース見出しはLLM入力前に除外します。除外された見出しは根拠として使いません。
 
-## Webullと発注安全性
+## Webull連携
 
-初期設定では実注文は出ません。
+Webullは保有銘柄と口座情報の読み取り用途だけで使います。
 
-```json
-"trading_mode": "dry_run",
-"allow_live_orders": false
-```
-
-Discordの承認ボタンを押しても、上記設定では注文案のドライラン記録だけを作ります。ライブ発注を有効化する場合は、別途小口テスト、権限確認、二段階確認フローの検証が必要です。
+注文作成、注文送信、発注確認、Discord上の承認/却下/詳細ボタンは削除済みです。Discord投稿は分析メモと候補表示のみを行います。
 
 ## 検証
 
@@ -145,7 +140,7 @@ python -m py_compile `
 ## 注意事項
 
 - 本リポジトリは投資助言ではありません。
-- ライブ発注は明示的に有効化しない限り行いません。
+- Webullの売買・注文送信機能はありません。
 - APIキー、Discord Bot Token、Webull認証情報、口座IDはコミットしないでください。
 - `analysis_outputs/`、`outputs/`、`.pkl`、`.parquet`、`.env` はGit管理対象外です。
 - バックテスト結果を評価する際は、手数料、スリッページ、データ時点、先見バイアス、ニュース混入を必ず確認してください。
